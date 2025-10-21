@@ -1,0 +1,443 @@
+--[[
+  Mod Menu Rayfield – WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat (Street Life Remastered)
+--]]
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Ładowanie Rayfield z obsługą błędów
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success then
+    warn("Failed to load Rayfield library: " .. tostring(Rayfield))
+    return
+end
+
+local Window = Rayfield:CreateWindow({
+    Name = "Bojuwkarz Menu",
+    LoadingTitle = "Ładowanie GUI",
+    LoadingSubtitle = "WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat",
+    ConfigurationSaving = {
+        Enabled = true,
+        FileName = "boj_menu"
+    }
+})
+
+-- Tworzenie zakładek (Items usunięte)
+local MainTab = Window:CreateTab("Main", 4483362458)
+local EspTab = Window:CreateTab("ESP", 4483362458)
+local PlayerTab = Window:CreateTab("Player", 4483362458)
+local HitboxTab = Window:CreateTab("Hitbox Expander", 4483362458)
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+
+---------------------------------------------------
+-- Main Tab: Developer and Version Info
+---------------------------------------------------
+MainTab:CreateLabel("Developer: Swifty")
+MainTab:CreateLabel("Version: 0.5 Beta")
+
+--- NOWE Z SCX HUB: Debug button do remotes (przeniesione z Items do Main)
+MainTab:CreateButton({
+    Name = "Print Remotes (Debug)",
+    Callback = function()
+        for _, v in pairs(ReplicatedStorage:GetChildren()) do
+            if v:IsA("RemoteEvent") then
+                print("Remote: " .. v.Name)
+            end
+        end
+    end
+})
+
+---------------------------------------------------
+-- Player Tab: WalkSpeed, Fly, Click TP, Noclip + Infinite Stamina
+---------------------------------------------------
+local speedEnabled, setSpeed = false, 16
+local flyEnabled, flySpeed = false, 100
+local clickTpEnabled, clickTpKey = false, Enum.KeyCode.Q
+local noclipEnabled = false
+local infiniteStaminaEnabled = false
+local staminaMax = 100
+local playerConn = nil
+local noclipConn = nil
+local clickTpConn = nil
+local clickTpConnections = nil
+local isClickTpKeyHeld = false
+local originalStaminaValues = {} --- POPRAWKA: Przechowuj oryginalne wartości stamina
+
+-- Cache postaci dla optymalizacji
+local function getCharacterComponents()
+    local char = LocalPlayer.Character
+    return char, char and char:FindFirstChild("HumanoidRootPart"), char and char:FindFirstChildOfClass("Humanoid")
+end
+
+-- Jedna pętla Heartbeat dla WalkSpeed, Fly, Infinite Ammo, Infinite Stamina
+local infiniteAmmoEnabled = false
+local function updatePlayerMechanics()
+    playerConn = RunService.Heartbeat:Connect(function(dt)
+        local char, root, hum = getCharacterComponents()
+        if not (char and root and hum) then return end
+
+        -- WalkSpeed
+        if speedEnabled and hum.WalkSpeed ~= setSpeed then
+            hum.WalkSpeed = setSpeed
+        end
+
+        -- Fly
+        if flyEnabled then
+            hum.PlatformStand = true
+            local dir = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0, 1, 0) end
+            root.Velocity = dir.Magnitude > 0 and dir.Unit * flySpeed or Vector3.zero
+        elseif hum.PlatformStand then
+            hum.PlatformStand = false
+            root.Velocity = Vector3.zero
+        end
+
+        -- Infinite Stamina
+        if infiniteStaminaEnabled then
+            -- Sprawdź standardowy Humanoid stamina
+            if hum:FindFirstChild("Stamina") then
+                if not originalStaminaValues[hum] then
+                    originalStaminaValues[hum] = hum.Stamina.Value --- POPRAWKA: Zapisz oryginalną wartość
+                end
+                hum.Stamina.Value = staminaMax
+            end
+            -- Custom values w Character
+            for _, val in pairs(char:GetDescendants()) do
+                if val:IsA("IntValue") or val:IsA("NumberValue") then
+                    if val.Name:lower():match("stamina") or val.Name:lower():match("energy") then
+                        if not originalStaminaValues[val] then
+                            originalStaminaValues[val] = val.Value --- POPRAWKA: Zapisz oryginalną wartość
+                        end
+                        val.Value = staminaMax
+                    end
+                end
+            end
+            -- Hook na skrypty stamina
+            for _, obj in pairs(char:GetDescendants()) do
+                if obj:IsA("LocalScript") and obj.Name:lower():match("stamina") then
+                    for _, conn in pairs(getconnections(obj)) do
+                        if conn.Function and type(conn.Function) == "function" then
+                            conn:Disable()
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Infinite Ammo
+        if infiniteAmmoEnabled then
+            for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, value in pairs(tool:GetChildren()) do
+                        if value:IsA("IntValue") or value:IsA("NumberValue") then
+                            if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
+                                print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
+                                value.Value = 9999
+                            end
+                        end
+                    end
+                end
+            end
+            if char then
+                for _, tool in pairs(char:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        for _, value in pairs(tool:GetChildren()) do
+                            if value:IsA("IntValue") or value:IsA("NumberValue") then
+                                if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
+                                    print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
+                                    value.Value = 9999
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Funkcja do resetowania stamina --- POPRAWKA: Przywraca oryginalne wartości
+local function resetStamina()
+    local char, _, hum = getCharacterComponents()
+    if not (char and hum) then return end
+
+    if hum:FindFirstChild("Stamina") and originalStaminaValues[hum] then
+        hum.Stamina.Value = originalStaminaValues[hum]
+        originalStaminaValues[hum] = nil
+    end
+    for _, val in pairs(char:GetDescendants()) do
+        if (val:IsA("IntValue") or val:IsA("NumberValue")) and (val.Name:lower():match("stamina") or val.Name:lower():match("energy")) then
+            if originalStaminaValues[val] then
+                val.Value = originalStaminaValues[val]
+                originalStaminaValues[val] = nil
+            end
+        end
+    end
+    -- Re-enable connections stamina
+    for _, obj in pairs(char:GetDescendants()) do
+        if obj:IsA("LocalScript") and obj.Name:lower():match("stamina") then
+            for _, conn in pairs(getconnections(obj)) do
+                if conn.Function and type(conn.Function) == "function" then
+                    conn:Enable()
+                end
+            end
+        end
+    end
+end
+
+-- WalkSpeed UI
+PlayerTab:CreateSlider({
+    Name = "Ustaw prędkość chodzenia",
+    Range = {16, 200},
+    Increment = 1,
+    CurrentValue = setSpeed,
+    Callback = function(v)
+        setSpeed = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "WalkSpeed ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        speedEnabled = state
+        if speedEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
+            playerConn:Disconnect()
+            playerConn = nil
+            local _, _, hum = getCharacterComponents()
+            if hum then hum.WalkSpeed = 16 end
+        end
+    end
+})
+
+-- Fly UI
+PlayerTab:CreateSlider({
+    Name = "Fly speed",
+    Range = {10, 300},
+    Increment = 5,
+    CurrentValue = flySpeed,
+    Callback = function(v)
+        flySpeed = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Fly ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        flyEnabled = state
+        if flyEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
+            playerConn:Disconnect()
+            playerConn = nil
+            local _, _, hum = getCharacterComponents()
+            if hum then hum.PlatformStand = false end
+        end
+    end
+})
+
+-- Infinite Stamina UI
+PlayerTab:CreateSlider({
+    Name = "Max Stamina",
+    Range = {50, 500},
+    Increment = 10,
+    CurrentValue = staminaMax,
+    Callback = function(v)
+        staminaMax = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Infinite Stamina ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        infiniteStaminaEnabled = state
+        if infiniteStaminaEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
+            playerConn:Disconnect()
+            playerConn = nil
+            resetStamina() --- POPRAWKA: Reset stamina przy OFF
+        end
+    end
+})
+
+-- Click TP UI
+PlayerTab:CreateDropdown({
+    Name = "Click TP Key",
+    Options = {"Q", "E", "F", "T", "R", "Z"},
+    CurrentOption = "Q",
+    Callback = function(option)
+        clickTpKey = Enum.KeyCode[option]
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Click TP ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        clickTpEnabled = state
+        if clickTpEnabled then
+            local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if not gameProcessed and input.KeyCode == clickTpKey then
+                    isClickTpKeyHeld = true
+                end
+            end)
+            local endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
+                if input.KeyCode == clickTpKey then
+                    isClickTpKeyHeld = false
+                end
+            end)
+            clickTpConn = Mouse.Button1Down:Connect(function()
+                if isClickTpKeyHeld and clickTpEnabled then
+                    local _, root = getCharacterComponents()
+                    if root then
+                        root.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+                    end
+                end
+            end)
+            clickTpConnections = {beganConn, endedConn, clickTpConn}
+        else
+            isClickTpKeyHeld = false
+            if clickTpConnections then
+                for _, conn in ipairs(clickTpConnections) do
+                    conn:Disconnect()
+                end
+                clickTpConnections = nil
+            end
+            if clickTpConn then
+                clickTpConn:Disconnect()
+                clickTpConn = nil
+            end
+        end
+    end
+})
+
+-- Noclip UI
+PlayerTab:CreateToggle({
+    Name = "Noclip ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        noclipEnabled = state
+        if noclipEnabled then
+            noclipConn = RunService.Stepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        else
+            if noclipConn then
+                noclipConn:Disconnect()
+                noclipConn = nil
+            end
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+})
+
+---------------------------------------------------
+-- Hitbox Expander Tab
+---------------------------------------------------
+local hitboxEnabled = false
+local headChamsEnabled = false
+local hitboxSize = 2
+local headChamsColor = Color3.fromRGB(255, 255, 0)
+local originalHeadSizes = {}
+local headChamsDrawings = {}
+local hitboxRefreshConn = nil
+
+local function updateHitbox(plr)
+    if plr == LocalPlayer then return end
+    local char = plr.Character
+    local head = char and char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        if hitboxEnabled then
+            if not originalHeadSizes[plr] then
+                originalHeadSizes[plr] = head.Size
+            end
+            head.Size = originalHeadSizes[plr] * hitboxSize
+            head.CanCollide = false
+        else
+            if originalHeadSizes[plr] then
+                head.Size = originalHeadSizes[plr]
+                head.CanCollide = true
+            end
+        end
+    end
+end
+
+local function updateHeadChams(plr)
+    if plr == LocalPlayer then return end
+    local char = plr.Character
+    local head = char and char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        local highlight = headChamsDrawings[plr]
+        if not highlight then
+            highlight = Instance.new("Highlight")
+            highlight.FillColor = headChamsColor
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.FillTransparency = 0.5
+            highlight.OutlineTransparency = 0
+            highlight.Parent = head
+            headChamsDrawings[plr] = highlight
+        end
+        highlight.Adornee = headChamsEnabled and head or nil
+        highlight.FillColor = headChamsColor
+        highlight.Enabled = headChamsEnabled and head ~= nil
+    end
+end
+
+local function refreshHitboxes()
+    hitboxRefreshConn = RunService.Heartbeat:Connect(function()
+        if hitboxEnabled then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                updateHitbox(plr)
+            end
+        end
+    end)
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    updateHitbox(plr)
+    updateHeadChams(plr)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    originalHeadSizes[plr] = nil
+    if headChamsDrawings[plr] then
+        headChamsDrawings[plr]:Remove()
+        headChamsDrawings[plr] = nil
+    end
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do
+    updateHitbox(p)
+    updateHead
