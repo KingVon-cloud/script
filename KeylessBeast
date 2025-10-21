@@ -440,4 +440,348 @@ end)
 
 for _, p in ipairs(Players:GetPlayers()) do
     updateHitbox(p)
-    updateHead
+    updateHeadChams(p)
+end
+
+-- Hitbox Expander UI
+HitboxTab:CreateSlider({
+    Name = "Head Hitbox Size",
+    Range = {1, 10},
+    Increment = 0.5,
+    CurrentValue = hitboxSize,
+    Callback = function(v)
+        hitboxSize = v
+        if hitboxEnabled then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                updateHitbox(plr)
+            end
+        end
+    end
+})
+
+HitboxTab:CreateToggle({
+    Name = "Hitbox Expander ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        hitboxEnabled = state
+        for _, plr in ipairs(Players:GetPlayers()) do
+            updateHitbox(plr)
+        end
+        if hitboxEnabled and not hitboxRefreshConn then
+            refreshHitboxes()
+        elseif not hitboxEnabled and hitboxRefreshConn then
+            hitboxRefreshConn:Disconnect()
+            hitboxRefreshConn = nil
+        end
+    end
+})
+
+HitboxTab:CreateToggle({
+    Name = "Head Chams ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        headChamsEnabled = state
+        for _, plr in ipairs(Players:GetPlayers()) do
+            updateHeadChams(plr)
+        end
+    end
+})
+
+HitboxTab:CreateColorPicker({
+    Name = "Head Chams Color",
+    Color = headChamsColor,
+    Callback = function(color)
+        headChamsColor = color
+        for _, highlight in pairs(headChamsDrawings) do
+            highlight.FillColor = headChamsColor
+        end
+    end
+})
+
+---------------------------------------------------
+-- Combat Tab: Aimlock + Infinite Ammo
+---------------------------------------------------
+local aimlockEnabled = false
+local aimlockKey = Enum.KeyCode.E
+local aimlockDistance = 100
+local aimlockFOV = 60
+local showFOVCircle = false
+local isAimlockActive = false
+local aimlockConn = nil
+local fovCircle = Drawing.new("Circle")
+
+fovCircle.Visible = false
+fovCircle.Radius = 0
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+local function getClosestPlayerHead()
+    local closestPlayer = nil
+    local closestDistance = aimlockDistance
+    local camPos = Camera.CFrame.Position
+    local char, root = getCharacterComponents()
+
+    if not (char and root) then return nil end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local pChar = plr.Character
+        local pHead = pChar and pChar:FindFirstChild("Head")
+        if pHead then
+            local distance = (pHead.Position - camPos).Magnitude
+            local vector = pHead.Position - camPos
+            local angle = math.deg(math.acos(Camera.CFrame.LookVector:Dot(vector.Unit)))
+            if distance <= closestDistance and angle <= aimlockFOV / 2 then
+                closestDistance = distance
+                closestPlayer = plr
+            end
+        end
+    end
+    return closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head")
+end
+
+-- Combat UI
+CombatTab:CreateDropdown({
+    Name = "Aimlock Key",
+    Options = {"Q", "E", "F", "T", "R", "Z"},
+    CurrentOption = "E",
+    Callback = function(option)
+        aimlockKey = Enum.KeyCode[option]
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Aimlock Distance",
+    Range = {0, 300},
+    Increment = 5,
+    CurrentValue = aimlockDistance,
+    Callback = function(v)
+        aimlockDistance = v
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Aimlock FOV",
+    Range = {10, 120},
+    Increment = 5,
+    CurrentValue = aimlockFOV,
+    Callback = function(v)
+        aimlockFOV = v
+        if showFOVCircle then
+            fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Show FOV Circle ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        showFOVCircle = state
+        fovCircle.Visible = showFOVCircle
+        if showFOVCircle then
+            fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Aimlock ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        aimlockEnabled = state
+        if aimlockEnabled then
+            local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if not gameProcessed and input.KeyCode == aimlockKey then
+                    isAimlockActive = not isAimlockActive
+                end
+            end)
+            aimlockConn = RunService.RenderStepped:Connect(function()
+                if isAimlockActive and aimlockEnabled then
+                    local targetHead = getClosestPlayerHead()
+                    if targetHead then
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+                    end
+                end
+                if showFOVCircle then
+                    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+                end
+            end)
+            aimlockConnections = {beganConn, aimlockConn}
+        else
+            isAimlockActive = false
+            if aimlockConnections then
+                for _, conn in ipairs(aimlockConnections) do
+                    conn:Disconnect()
+                end
+                aimlockConnections = nil
+            end
+            if aimlockConn then
+                aimlockConn:Disconnect()
+                aimlockConn = nil
+            end
+            fovCircle.Visible = false
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Infinite Ammo ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        infiniteAmmoEnabled = state
+        if infiniteAmmoEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
+            playerConn:Disconnect()
+            playerConn = nil
+            resetStamina() --- POPRAWKA: Reset stamina przy OFF
+        end
+    end
+})
+
+---------------------------------------------------
+-- ESP section
+---------------------------------------------------
+local espEnabled = false
+local chamsEnabled = false
+local espColor = Color3.fromRGB(0, 255, 0)
+local chamsColor = Color3.fromRGB(255, 0, 0)
+local espDrawings = {}
+local chamsDrawings = {}
+
+local function getPlayerComponents(plr)
+    local char = plr.Character
+    return char, char and char:FindFirstChild("HumanoidRootPart"), char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function createEsp(plr)
+    if plr == LocalPlayer then return end
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = espColor
+    text.Visible = false
+    espDrawings[plr] = text
+end
+
+local function removeEsp(plr)
+    if espDrawings[plr] then
+        espDrawings[plr]:Remove()
+        espDrawings[plr] = nil
+    end
+end
+
+local function createChams(plr)
+    if plr == LocalPlayer then return end
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = chamsColor
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = false
+    chamsDrawings[plr] = highlight
+end
+
+local function removeChams(plr)
+    if chamsDrawings[plr] then
+        chamsDrawings[plr]:Remove()
+        chamsDrawings[plr] = nil
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    createEsp(plr)
+    createChams(plr)
+    updateHitbox(plr)
+    updateHeadChams(plr)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    removeEsp(plr)
+    removeChams(plr)
+    originalHeadSizes[plr] = nil
+    if headChamsDrawings[plr] then
+        headChamsDrawings[plr]:Remove()
+        headChamsDrawings[plr] = nil
+    end
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do
+    createEsp(p)
+    createChams(p)
+    updateHitbox(p)
+    updateHeadChams(p)
+end
+
+RunService.RenderStepped:Connect(function()
+    if not (espEnabled or chamsEnabled) then
+        for _, d in pairs(espDrawings) do d.Visible = false end
+        for _, h in pairs(chamsDrawings) do h.Enabled = false end
+        return
+    end
+
+    for plr, text in pairs(espDrawings) do
+        local char, root, hum = getPlayerComponents(plr)
+        if espEnabled and hum and root then
+            local pos, vis = Camera:WorldToViewportPoint(root.Position)
+            text.Visible = vis
+            if vis then
+                text.Position = Vector2.new(pos.X, pos.Y - 20)
+                text.Text = string.format("%s | HP: %d", plr.Name, hum.Health)
+                text.Color = espColor
+            end
+        else
+            text.Visible = false
+        end
+    end
+
+    for plr, highlight in pairs(chamsDrawings) do
+        highlight.Adornee = plr.Character
+        highlight.FillColor = chamsColor
+        highlight.Enabled = chamsEnabled and plr.Character ~= nil
+    end
+end)
+
+-- ESP Tab UI
+EspTab:CreateToggle({
+    Name = "ESP Nick + HP",
+    CurrentValue = false,
+    Callback = function(state)
+        espEnabled = state
+    end
+})
+
+EspTab:CreateColorPicker({
+    Name = "ESP Nick + HP Color",
+    Color = espColor,
+    Callback = function(color)
+        espColor = color
+        for _, text in pairs(espDrawings) do
+            text.Color = espColor
+        end
+    end
+})
+
+EspTab:CreateToggle({
+    Name = "Chams ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        chamsEnabled = state
+    end
+})
+
+EspTab:CreateColorPicker({
+    Name = "Chams Color",
+    Color = chamsColor,
+    Callback = function(color)
+        chamsColor = color
+        for _, highlight in pairs(chamsDrawings) do
+            highlight.FillColor = chamsColor
+        end
+    end
+})
