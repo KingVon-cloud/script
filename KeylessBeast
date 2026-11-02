@@ -1,5 +1,6 @@
 --[[
-  Mod Menu Rayfield – WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat (Street Life Remastered)
+  XyzPVP Hub by RomanRDM
+  WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat
 --]]
 
 local RunService = game:GetService("RunService")
@@ -10,7 +11,7 @@ local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Ładowanie Rayfield z obsługą błędów
+-- Ładowanie Rayfield
 local success, Rayfield = pcall(function()
     return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 end)
@@ -21,16 +22,24 @@ if not success then
 end
 
 local Window = Rayfield:CreateWindow({
-    Name = "Bojuwkarz Menu",
-    LoadingTitle = "Ładowanie GUI",
-    LoadingSubtitle = "WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat",
+    Name = "XyzPVP Hub",
+    LoadingTitle = "Welcome to XyzPVP Hub",
+    LoadingSubtitle = "by RomanRDM",
     ConfigurationSaving = {
         Enabled = true,
-        FileName = "boj_menu"
+        FileName = "XyzPVP_Hub_by_RomanRDM"
     }
 })
 
--- Tworzenie zakładek (Items usunięte)
+-- Welcome Notification
+Rayfield:Notify({
+    Title = "XyzPVP Hub",
+    Content = "Welcome to XyzPVP Hub by RomanRDM 🔥",
+    Duration = 6.5,
+    Image = 4483362458
+})
+
+-- Zakładki
 local MainTab = Window:CreateTab("Main", 4483362458)
 local EspTab = Window:CreateTab("ESP", 4483362458)
 local PlayerTab = Window:CreateTab("Player", 4483362458)
@@ -38,12 +47,12 @@ local HitboxTab = Window:CreateTab("Hitbox Expander", 4483362458)
 local CombatTab = Window:CreateTab("Combat", 4483362458)
 
 ---------------------------------------------------
--- Main Tab: Developer and Version Info
+-- Main Tab
 ---------------------------------------------------
-MainTab:CreateLabel("Developer: Swifty")
-MainTab:CreateLabel("Version: 0.5 Beta")
+MainTab:CreateLabel("Developer: RomanRDM")
+MainTab:CreateLabel("Version: 1.0 | XyzPVP Hub")
+MainTab:CreateLabel("Game: Gre XyzPVP")
 
---- NOWE Z SCX HUB: Debug button do remotes (przeniesione z Items do Main)
 MainTab:CreateButton({
     Name = "Print Remotes (Debug)",
     Callback = function()
@@ -56,7 +65,7 @@ MainTab:CreateButton({
 })
 
 ---------------------------------------------------
--- Player Tab: WalkSpeed, Fly, Click TP, Noclip + Infinite Stamina
+-- Player Tab
 ---------------------------------------------------
 local speedEnabled, setSpeed = false, 16
 local flyEnabled, flySpeed = false, 100
@@ -69,27 +78,23 @@ local noclipConn = nil
 local clickTpConn = nil
 local clickTpConnections = nil
 local isClickTpKeyHeld = false
-local originalStaminaValues = {} --- POPRAWKA: Przechowuj oryginalne wartości stamina
+local originalStaminaValues = {}
+local infiniteAmmoEnabled = false
 
--- Cache postaci dla optymalizacji
 local function getCharacterComponents()
     local char = LocalPlayer.Character
     return char, char and char:FindFirstChild("HumanoidRootPart"), char and char:FindFirstChildOfClass("Humanoid")
 end
 
--- Jedna pętla Heartbeat dla WalkSpeed, Fly, Infinite Ammo, Infinite Stamina
-local infiniteAmmoEnabled = false
 local function updatePlayerMechanics()
     playerConn = RunService.Heartbeat:Connect(function(dt)
         local char, root, hum = getCharacterComponents()
         if not (char and root and hum) then return end
 
-        -- WalkSpeed
         if speedEnabled and hum.WalkSpeed ~= setSpeed then
             hum.WalkSpeed = setSpeed
         end
 
-        -- Fly
         if flyEnabled then
             hum.PlatformStand = true
             local dir = Vector3.zero
@@ -105,46 +110,31 @@ local function updatePlayerMechanics()
             root.Velocity = Vector3.zero
         end
 
-        -- Infinite Stamina
         if infiniteStaminaEnabled then
-            -- Sprawdź standardowy Humanoid stamina
             if hum:FindFirstChild("Stamina") then
                 if not originalStaminaValues[hum] then
-                    originalStaminaValues[hum] = hum.Stamina.Value --- POPRAWKA: Zapisz oryginalną wartość
+                    originalStaminaValues[hum] = hum.Stamina.Value
                 end
                 hum.Stamina.Value = staminaMax
             end
-            -- Custom values w Character
             for _, val in pairs(char:GetDescendants()) do
                 if val:IsA("IntValue") or val:IsA("NumberValue") then
                     if val.Name:lower():match("stamina") or val.Name:lower():match("energy") then
                         if not originalStaminaValues[val] then
-                            originalStaminaValues[val] = val.Value --- POPRAWKA: Zapisz oryginalną wartość
+                            originalStaminaValues[val] = val.Value
                         end
                         val.Value = staminaMax
                     end
                 end
             end
-            -- Hook na skrypty stamina
-            for _, obj in pairs(char:GetDescendants()) do
-                if obj:IsA("LocalScript") and obj.Name:lower():match("stamina") then
-                    for _, conn in pairs(getconnections(obj)) do
-                        if conn.Function and type(conn.Function) == "function" then
-                            conn:Disable()
-                        end
-                    end
-                end
-            end
         end
 
-        -- Infinite Ammo
         if infiniteAmmoEnabled then
             for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
                 if tool:IsA("Tool") then
                     for _, value in pairs(tool:GetChildren()) do
                         if value:IsA("IntValue") or value:IsA("NumberValue") then
                             if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
-                                print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
                                 value.Value = 9999
                             end
                         end
@@ -157,7 +147,6 @@ local function updatePlayerMechanics()
                         for _, value in pairs(tool:GetChildren()) do
                             if value:IsA("IntValue") or value:IsA("NumberValue") then
                                 if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
-                                    print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
                                     value.Value = 9999
                                 end
                             end
@@ -169,11 +158,9 @@ local function updatePlayerMechanics()
     end)
 end
 
--- Funkcja do resetowania stamina --- POPRAWKA: Przywraca oryginalne wartości
 local function resetStamina()
     local char, _, hum = getCharacterComponents()
     if not (char and hum) then return end
-
     if hum:FindFirstChild("Stamina") and originalStaminaValues[hum] then
         hum.Stamina.Value = originalStaminaValues[hum]
         originalStaminaValues[hum] = nil
@@ -186,27 +173,15 @@ local function resetStamina()
             end
         end
     end
-    -- Re-enable connections stamina
-    for _, obj in pairs(char:GetDescendants()) do
-        if obj:IsA("LocalScript") and obj.Name:lower():match("stamina") then
-            for _, conn in pairs(getconnections(obj)) do
-                if conn.Function and type(conn.Function) == "function" then
-                    conn:Enable()
-                end
-            end
-        end
-    end
 end
 
--- WalkSpeed UI
+-- WalkSpeed
 PlayerTab:CreateSlider({
     Name = "Ustaw prędkość chodzenia",
     Range = {16, 200},
     Increment = 1,
     CurrentValue = setSpeed,
-    Callback = function(v)
-        setSpeed = v
-    end
+    Callback = function(v) setSpeed = v end
 })
 
 PlayerTab:CreateToggle({
@@ -225,15 +200,13 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Fly UI
+-- Fly
 PlayerTab:CreateSlider({
     Name = "Fly speed",
     Range = {10, 300},
     Increment = 5,
     CurrentValue = flySpeed,
-    Callback = function(v)
-        flySpeed = v
-    end
+    Callback = function(v) flySpeed = v end
 })
 
 PlayerTab:CreateToggle({
@@ -252,15 +225,13 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Infinite Stamina UI
+-- Infinite Stamina
 PlayerTab:CreateSlider({
     Name = "Max Stamina",
     Range = {50, 500},
     Increment = 10,
     CurrentValue = staminaMax,
-    Callback = function(v)
-        staminaMax = v
-    end
+    Callback = function(v) staminaMax = v end
 })
 
 PlayerTab:CreateToggle({
@@ -273,19 +244,17 @@ PlayerTab:CreateToggle({
         elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
             playerConn:Disconnect()
             playerConn = nil
-            resetStamina() --- POPRAWKA: Reset stamina przy OFF
+            resetStamina()
         end
     end
 })
 
--- Click TP UI
+-- Click TP
 PlayerTab:CreateDropdown({
     Name = "Click TP Key",
     Options = {"Q", "E", "F", "T", "R", "Z"},
     CurrentOption = "Q",
-    Callback = function(option)
-        clickTpKey = Enum.KeyCode[option]
-    end
+    Callback = function(option) clickTpKey = Enum.KeyCode[option] end
 })
 
 PlayerTab:CreateToggle({
@@ -299,7 +268,7 @@ PlayerTab:CreateToggle({
                     isClickTpKeyHeld = true
                 end
             end)
-            local endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
+            local endedConn = UserInputService.InputEnded:Connect(function(input)
                 if input.KeyCode == clickTpKey then
                     isClickTpKeyHeld = false
                 end
@@ -321,15 +290,11 @@ PlayerTab:CreateToggle({
                 end
                 clickTpConnections = nil
             end
-            if clickTpConn then
-                clickTpConn:Disconnect()
-                clickTpConn = nil
-            end
         end
     end
 })
 
--- Noclip UI
+-- Noclip
 PlayerTab:CreateToggle({
     Name = "Noclip ON/OFF",
     CurrentValue = false,
@@ -364,7 +329,7 @@ PlayerTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- Hitbox Expander Tab
+-- Hitbox Expander
 ---------------------------------------------------
 local hitboxEnabled = false
 local headChamsEnabled = false
@@ -443,7 +408,6 @@ for _, p in ipairs(Players:GetPlayers()) do
     updateHeadChams(p)
 end
 
--- Hitbox Expander UI
 HitboxTab:CreateSlider({
     Name = "Head Hitbox Size",
     Range = {1, 10},
@@ -499,7 +463,7 @@ HitboxTab:CreateColorPicker({
 })
 
 ---------------------------------------------------
--- Combat Tab: Aimlock + Infinite Ammo
+-- Combat Tab
 ---------------------------------------------------
 local aimlockEnabled = false
 local aimlockKey = Enum.KeyCode.E
@@ -508,8 +472,9 @@ local aimlockFOV = 60
 local showFOVCircle = false
 local isAimlockActive = false
 local aimlockConn = nil
-local fovCircle = Drawing.new("Circle")
+local aimlockConnections = nil
 
+local fovCircle = Drawing.new("Circle")
 fovCircle.Visible = false
 fovCircle.Radius = 0
 fovCircle.Color = Color3.fromRGB(255, 255, 255)
@@ -522,7 +487,6 @@ local function getClosestPlayerHead()
     local closestDistance = aimlockDistance
     local camPos = Camera.CFrame.Position
     local char, root = getCharacterComponents()
-
     if not (char and root) then return nil end
 
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -542,14 +506,11 @@ local function getClosestPlayerHead()
     return closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head")
 end
 
--- Combat UI
 CombatTab:CreateDropdown({
     Name = "Aimlock Key",
     Options = {"Q", "E", "F", "T", "R", "Z"},
     CurrentOption = "E",
-    Callback = function(option)
-        aimlockKey = Enum.KeyCode[option]
-    end
+    Callback = function(option) aimlockKey = Enum.KeyCode[option] end
 })
 
 CombatTab:CreateSlider({
@@ -557,9 +518,7 @@ CombatTab:CreateSlider({
     Range = {0, 300},
     Increment = 5,
     CurrentValue = aimlockDistance,
-    Callback = function(v)
-        aimlockDistance = v
-    end
+    Callback = function(v) aimlockDistance = v end
 })
 
 CombatTab:CreateSlider({
@@ -619,10 +578,6 @@ CombatTab:CreateToggle({
                 end
                 aimlockConnections = nil
             end
-            if aimlockConn then
-                aimlockConn:Disconnect()
-                aimlockConn = nil
-            end
             fovCircle.Visible = false
         end
     end
@@ -638,13 +593,13 @@ CombatTab:CreateToggle({
         elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
             playerConn:Disconnect()
             playerConn = nil
-            resetStamina() --- POPRAWKA: Reset stamina przy OFF
+            resetStamina()
         end
     end
 })
 
 ---------------------------------------------------
--- ESP section
+-- ESP
 ---------------------------------------------------
 local espEnabled = false
 local chamsEnabled = false
@@ -732,7 +687,7 @@ RunService.RenderStepped:Connect(function()
             text.Visible = vis
             if vis then
                 text.Position = Vector2.new(pos.X, pos.Y - 20)
-                text.Text = string.format("%s | HP: %d", plr.Name, hum.Health)
+                text.Text = string.format("%s | HP: %d", plr.Name, math.floor(hum.Health))
                 text.Color = espColor
             end
         else
@@ -747,13 +702,10 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ESP Tab UI
 EspTab:CreateToggle({
     Name = "ESP Nick + HP",
     CurrentValue = false,
-    Callback = function(state)
-        espEnabled = state
-    end
+    Callback = function(state) espEnabled = state end
 })
 
 EspTab:CreateColorPicker({
@@ -770,9 +722,7 @@ EspTab:CreateColorPicker({
 EspTab:CreateToggle({
     Name = "Chams ON/OFF",
     CurrentValue = false,
-    Callback = function(state)
-        chamsEnabled = state
-    end
+    Callback = function(state) chamsEnabled = state end
 })
 
 EspTab:CreateColorPicker({
