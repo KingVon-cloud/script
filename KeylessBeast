@@ -49,7 +49,7 @@ local CombatTab = Window:CreateTab("Combat", 4483362458)
 MainTab:CreateLabel("Hub is for XyzPVP Game")
 MainTab:CreateLabel("Developer: Romanov_03")
 MainTab:CreateLabel("Discord: Romanov_03")
-MainTab:CreateLabel("Version: 1.3")
+MainTab:CreateLabel("Version: 1.4")
 
 ---------------------------------------------------
 -- Player Tab
@@ -311,7 +311,7 @@ PlayerTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- Hitbox Expander (TWÓJ hitbox jest całkowicie chroniony)
+-- Hitbox Expander (TWÓJ hitbox jest całkowicie chroniony + odporny na respawn)
 ---------------------------------------------------
 local hitboxEnabled = false
 local headChamsEnabled = false
@@ -321,25 +321,38 @@ local originalHeadSizes = {}
 local originalLocalHeadSize = nil
 local headChamsDrawings = {}
 local hitboxRefreshConn = nil
-local localHeadProtectConn = nil
+
+local DEFAULT_HEAD_SIZE = Vector3.new(1.2, 1.2, 1.2)
+
+local function isNormalHeadSize(size)
+    return size.X <= 2.5 and size.Y <= 2.5 and size.Z <= 2.5
+end
 
 local function forceProtectLocalHead()
     local char = LocalPlayer.Character
     if not char then return end
+
     local head = char:FindFirstChild("Head")
-    if head and head:IsA("BasePart") then
-        if not originalLocalHeadSize then
+    if not (head and head:IsA("BasePart")) then return end
+
+    -- Jeśli nie mamy zapisanego rozmiaru albo zapisany jest nienormalny → spróbuj złapać dobry
+    if not originalLocalHeadSize or not isNormalHeadSize(originalLocalHeadSize) then
+        if isNormalHeadSize(head.Size) then
             originalLocalHeadSize = head.Size
+        else
+            originalLocalHeadSize = DEFAULT_HEAD_SIZE
         end
-        if head.Size ~= originalLocalHeadSize then
-            head.Size = originalLocalHeadSize
-        end
-        head.CanCollide = true
     end
+
+    -- Zawsze wymuszamy normalny rozmiar
+    if (head.Size - originalLocalHeadSize).Magnitude > 0.05 then
+        head.Size = originalLocalHeadSize
+    end
+    head.CanCollide = true
 end
 
--- Ochrona działa ZAWSZE (niezależnie od toggle)
-localHeadProtectConn = RunService.Heartbeat:Connect(function()
+-- Ochrona działa ZAWSZE
+RunService.Heartbeat:Connect(function()
     forceProtectLocalHead()
 end)
 
@@ -389,7 +402,9 @@ end
 local function refreshHitboxes()
     if hitboxRefreshConn then
         hitboxRefreshConn:Disconnect()
+        hitboxRefreshConn = nil
     end
+
     hitboxRefreshConn = RunService.Heartbeat:Connect(function()
         if hitboxEnabled then
             for _, plr in ipairs(Players:GetPlayers()) do
@@ -401,16 +416,39 @@ local function refreshHitboxes()
     end)
 end
 
--- Reset rozmiaru głowy po respawnie
+-- Obsługa respawnu – najważniejsza część naprawy
 LocalPlayer.CharacterAdded:Connect(function(char)
     originalLocalHeadSize = nil
-    task.wait(1)
-    local head = char:FindFirstChild("Head")
-    if head then
-        originalLocalHeadSize = head.Size
-        forceProtectLocalHead()
-    end
+
+    task.spawn(function()
+        local head = char:WaitForChild("Head", 6)
+        if not head then return end
+
+        -- Czekamy aż postać się w pełni załaduje
+        task.wait(1.2)
+
+        if head and head.Parent then
+            if isNormalHeadSize(head.Size) then
+                originalLocalHeadSize = head.Size
+            else
+                originalLocalHeadSize = DEFAULT_HEAD_SIZE
+                head.Size = DEFAULT_HEAD_SIZE
+            end
+            forceProtectLocalHead()
+        end
+    end)
 end)
+
+-- Na start
+if LocalPlayer.Character then
+    task.spawn(function()
+        local head = LocalPlayer.Character:FindFirstChild("Head")
+        if head and isNormalHeadSize(head.Size) then
+            originalLocalHeadSize = head.Size
+        end
+        forceProtectLocalHead()
+    end)
+end
 
 Players.PlayerAdded:Connect(function(plr)
     if plr ~= LocalPlayer then
@@ -505,7 +543,7 @@ HitboxTab:CreateColorPicker({
 })
 
 ---------------------------------------------------
--- Combat Tab (Hold to Lock + idealny środek głowy)
+-- Combat Tab (Hold to Lock)
 ---------------------------------------------------
 local aimlockEnabled = false
 local aimlockKey = Enum.KeyCode.E
@@ -615,7 +653,6 @@ CombatTab:CreateToggle({
                 if isHoldingAimlock and aimlockEnabled then
                     local targetHead = getClosestPlayerHead()
                     if targetHead and targetHead.Parent then
-                        -- Idealnie w środek głowy
                         Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
                     end
                 end
