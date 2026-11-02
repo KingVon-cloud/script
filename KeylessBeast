@@ -1,6 +1,6 @@
 --[[
-  XyzPVP Hub by RomanRDM
-  WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat
+  XyzPVP Hub by Romanov_03
+  WalkSpeed + ESP + Box ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat
 --]]
 
 local RunService = game:GetService("RunService")
@@ -24,17 +24,17 @@ end
 local Window = Rayfield:CreateWindow({
     Name = "XyzPVP Hub",
     LoadingTitle = "Welcome to XyzPVP Hub",
-    LoadingSubtitle = "by RomanRDM",
+    LoadingSubtitle = "by Romanov_03",
     ConfigurationSaving = {
         Enabled = true,
-        FileName = "XyzPVP_Hub_by_RomanRDM"
+        FileName = "XyzPVP_Hub_by_Romanov_03"
     }
 })
 
 -- Welcome Notification
 Rayfield:Notify({
     Title = "XyzPVP Hub",
-    Content = "Welcome to XyzPVP Hub by RomanRDM 🔥",
+    Content = "Welcome to XyzPVP Hub by Romanov_03 🔥",
     Duration = 6.5,
     Image = 4483362458
 })
@@ -49,20 +49,10 @@ local CombatTab = Window:CreateTab("Combat", 4483362458)
 ---------------------------------------------------
 -- Main Tab
 ---------------------------------------------------
-MainTab:CreateLabel("Developer: RomanRDM")
-MainTab:CreateLabel("Version: 1.0 | XyzPVP Hub")
-MainTab:CreateLabel("Game: Gre XyzPVP")
-
-MainTab:CreateButton({
-    Name = "Print Remotes (Debug)",
-    Callback = function()
-        for _, v in pairs(ReplicatedStorage:GetChildren()) do
-            if v:IsA("RemoteEvent") then
-                print("Remote: " .. v.Name)
-            end
-        end
-    end
-})
+MainTab:CreateLabel("Hub is for XyzPVP Game")
+MainTab:CreateLabel("Developer: Romanov_03")
+MainTab:CreateLabel("Discord: Romanov_03")
+MainTab:CreateLabel("Version: 1.1")
 
 ---------------------------------------------------
 -- Player Tab
@@ -87,7 +77,7 @@ local function getCharacterComponents()
 end
 
 local function updatePlayerMechanics()
-    playerConn = RunService.Heartbeat:Connect(function(dt)
+    playerConn = RunService.Heartbeat:Connect(function()
         local char, root, hum = getCharacterComponents()
         if not (char and root and hum) then return end
 
@@ -329,7 +319,7 @@ PlayerTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- Hitbox Expander
+-- Hitbox Expander (NIE rusza Twojej głowy)
 ---------------------------------------------------
 local hitboxEnabled = false
 local headChamsEnabled = false
@@ -340,7 +330,8 @@ local headChamsDrawings = {}
 local hitboxRefreshConn = nil
 
 local function updateHitbox(plr)
-    if plr == LocalPlayer then return end
+    if plr == LocalPlayer then return end -- NIGDY nie ruszamy lokalnego gracza
+
     local char = plr.Character
     local head = char and char:FindFirstChild("Head")
     if head and head:IsA("BasePart") then
@@ -361,6 +352,7 @@ end
 
 local function updateHeadChams(plr)
     if plr == LocalPlayer then return end
+
     local char = plr.Character
     local head = char and char:FindFirstChild("Head")
     if head and head:IsA("BasePart") then
@@ -384,15 +376,19 @@ local function refreshHitboxes()
     hitboxRefreshConn = RunService.Heartbeat:Connect(function()
         if hitboxEnabled then
             for _, plr in ipairs(Players:GetPlayers()) do
-                updateHitbox(plr)
+                if plr ~= LocalPlayer then
+                    updateHitbox(plr)
+                end
             end
         end
     end)
 end
 
 Players.PlayerAdded:Connect(function(plr)
-    updateHitbox(plr)
-    updateHeadChams(plr)
+    if plr ~= LocalPlayer then
+        updateHitbox(plr)
+        updateHeadChams(plr)
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -404,8 +400,10 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 for _, p in ipairs(Players:GetPlayers()) do
-    updateHitbox(p)
-    updateHeadChams(p)
+    if p ~= LocalPlayer then
+        updateHitbox(p)
+        updateHeadChams(p)
+    end
 end
 
 HitboxTab:CreateSlider({
@@ -417,7 +415,9 @@ HitboxTab:CreateSlider({
         hitboxSize = v
         if hitboxEnabled then
             for _, plr in ipairs(Players:GetPlayers()) do
-                updateHitbox(plr)
+                if plr ~= LocalPlayer then
+                    updateHitbox(plr)
+                end
             end
         end
     end
@@ -429,7 +429,9 @@ HitboxTab:CreateToggle({
     Callback = function(state)
         hitboxEnabled = state
         for _, plr in ipairs(Players:GetPlayers()) do
-            updateHitbox(plr)
+            if plr ~= LocalPlayer then
+                updateHitbox(plr)
+            end
         end
         if hitboxEnabled and not hitboxRefreshConn then
             refreshHitboxes()
@@ -446,7 +448,9 @@ HitboxTab:CreateToggle({
     Callback = function(state)
         headChamsEnabled = state
         for _, plr in ipairs(Players:GetPlayers()) do
-            updateHeadChams(plr)
+            if plr ~= LocalPlayer then
+                updateHeadChams(plr)
+            end
         end
     end
 })
@@ -486,8 +490,6 @@ local function getClosestPlayerHead()
     local closestPlayer = nil
     local closestDistance = aimlockDistance
     local camPos = Camera.CFrame.Position
-    local char, root = getCharacterComponents()
-    if not (char and root) then return nil end
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
@@ -599,13 +601,17 @@ CombatTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- ESP
+-- ESP + Box ESP
 ---------------------------------------------------
 local espEnabled = false
+local boxEspEnabled = false
 local chamsEnabled = false
 local espColor = Color3.fromRGB(0, 255, 0)
+local boxEspColor = Color3.fromRGB(255, 255, 255)
 local chamsColor = Color3.fromRGB(255, 0, 0)
+
 local espDrawings = {}
+local boxEspDrawings = {}
 local chamsDrawings = {}
 
 local function getPlayerComponents(plr)
@@ -624,11 +630,14 @@ local function createEsp(plr)
     espDrawings[plr] = text
 end
 
-local function removeEsp(plr)
-    if espDrawings[plr] then
-        espDrawings[plr]:Remove()
-        espDrawings[plr] = nil
-    end
+local function createBoxEsp(plr)
+    if plr == LocalPlayer then return end
+    local box = Drawing.new("Square")
+    box.Thickness = 1.5
+    box.Filled = false
+    box.Color = boxEspColor
+    box.Visible = false
+    boxEspDrawings[plr] = box
 end
 
 local function createChams(plr)
@@ -642,6 +651,20 @@ local function createChams(plr)
     chamsDrawings[plr] = highlight
 end
 
+local function removeEsp(plr)
+    if espDrawings[plr] then
+        espDrawings[plr]:Remove()
+        espDrawings[plr] = nil
+    end
+end
+
+local function removeBoxEsp(plr)
+    if boxEspDrawings[plr] then
+        boxEspDrawings[plr]:Remove()
+        boxEspDrawings[plr] = nil
+    end
+end
+
 local function removeChams(plr)
     if chamsDrawings[plr] then
         chamsDrawings[plr]:Remove()
@@ -650,14 +673,18 @@ local function removeChams(plr)
 end
 
 Players.PlayerAdded:Connect(function(plr)
-    createEsp(plr)
-    createChams(plr)
-    updateHitbox(plr)
-    updateHeadChams(plr)
+    if plr ~= LocalPlayer then
+        createEsp(plr)
+        createBoxEsp(plr)
+        createChams(plr)
+        updateHitbox(plr)
+        updateHeadChams(plr)
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
     removeEsp(plr)
+    removeBoxEsp(plr)
     removeChams(plr)
     originalHeadSizes[plr] = nil
     if headChamsDrawings[plr] then
@@ -667,34 +694,54 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 for _, p in ipairs(Players:GetPlayers()) do
-    createEsp(p)
-    createChams(p)
-    updateHitbox(p)
-    updateHeadChams(p)
+    if p ~= LocalPlayer then
+        createEsp(p)
+        createBoxEsp(p)
+        createChams(p)
+        updateHitbox(p)
+        updateHeadChams(p)
+    end
 end
 
 RunService.RenderStepped:Connect(function()
-    if not (espEnabled or chamsEnabled) then
-        for _, d in pairs(espDrawings) do d.Visible = false end
-        for _, h in pairs(chamsDrawings) do h.Enabled = false end
-        return
-    end
-
+    -- Text ESP + Box ESP + Chams
     for plr, text in pairs(espDrawings) do
         local char, root, hum = getPlayerComponents(plr)
-        if espEnabled and hum and root then
-            local pos, vis = Camera:WorldToViewportPoint(root.Position)
-            text.Visible = vis
-            if vis then
-                text.Position = Vector2.new(pos.X, pos.Y - 20)
+        local box = boxEspDrawings[plr]
+
+        if char and root and hum and hum.Health > 0 then
+            local head = char:FindFirstChild("Head")
+            local headPos, headOnScreen = Camera:WorldToViewportPoint(head and head.Position or root.Position)
+            local rootPos, rootOnScreen = Camera:WorldToViewportPoint(root.Position)
+
+            -- Text ESP
+            if espEnabled and (headOnScreen or rootOnScreen) then
+                text.Visible = true
+                text.Position = Vector2.new(headPos.X, headPos.Y - 22)
                 text.Text = string.format("%s | HP: %d", plr.Name, math.floor(hum.Health))
                 text.Color = espColor
+            else
+                text.Visible = false
+            end
+
+            -- Box ESP
+            if boxEspEnabled and box and (headOnScreen or rootOnScreen) then
+                local height = math.abs(headPos.Y - rootPos.Y) * 2.2
+                local width = height / 1.7
+                box.Size = Vector2.new(width, height)
+                box.Position = Vector2.new(headPos.X - width / 2, headPos.Y - height * 0.15)
+                box.Color = boxEspColor
+                box.Visible = true
+            elseif box then
+                box.Visible = false
             end
         else
             text.Visible = false
+            if box then box.Visible = false end
         end
     end
 
+    -- Chams
     for plr, highlight in pairs(chamsDrawings) do
         highlight.Adornee = plr.Character
         highlight.FillColor = chamsColor
@@ -702,6 +749,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- ESP Tab UI
 EspTab:CreateToggle({
     Name = "ESP Nick + HP",
     CurrentValue = false,
@@ -715,6 +763,23 @@ EspTab:CreateColorPicker({
         espColor = color
         for _, text in pairs(espDrawings) do
             text.Color = espColor
+        end
+    end
+})
+
+EspTab:CreateToggle({
+    Name = "Box ESP ON/OFF",
+    CurrentValue = false,
+    Callback = function(state) boxEspEnabled = state end
+})
+
+EspTab:CreateColorPicker({
+    Name = "Box ESP Color",
+    Color = boxEspColor,
+    Callback = function(color)
+        boxEspColor = color
+        for _, box in pairs(boxEspDrawings) do
+            box.Color = boxEspColor
         end
     end
 })
