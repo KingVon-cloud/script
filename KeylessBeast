@@ -31,7 +31,6 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- Welcome Notification
 Rayfield:Notify({
     Title = "XyzPVP Hub",
     Content = "Welcome to XyzPVP Hub by Romanov_03 🔥",
@@ -39,7 +38,6 @@ Rayfield:Notify({
     Image = 4483362458
 })
 
--- Zakładki
 local MainTab = Window:CreateTab("Main", 4483362458)
 local EspTab = Window:CreateTab("ESP", 4483362458)
 local PlayerTab = Window:CreateTab("Player", 4483362458)
@@ -52,7 +50,7 @@ local CombatTab = Window:CreateTab("Combat", 4483362458)
 MainTab:CreateLabel("Hub is for XyzPVP Game")
 MainTab:CreateLabel("Developer: Romanov_03")
 MainTab:CreateLabel("Discord: Romanov_03")
-MainTab:CreateLabel("Version: 1.1")
+MainTab:CreateLabel("Version: 1.2")
 
 ---------------------------------------------------
 -- Player Tab
@@ -165,7 +163,6 @@ local function resetStamina()
     end
 end
 
--- WalkSpeed
 PlayerTab:CreateSlider({
     Name = "Ustaw prędkość chodzenia",
     Range = {16, 200},
@@ -190,7 +187,6 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Fly
 PlayerTab:CreateSlider({
     Name = "Fly speed",
     Range = {10, 300},
@@ -215,7 +211,6 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Infinite Stamina
 PlayerTab:CreateSlider({
     Name = "Max Stamina",
     Range = {50, 500},
@@ -239,7 +234,6 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Click TP
 PlayerTab:CreateDropdown({
     Name = "Click TP Key",
     Options = {"Q", "E", "F", "T", "R", "Z"},
@@ -284,7 +278,6 @@ PlayerTab:CreateToggle({
     end
 })
 
--- Noclip
 PlayerTab:CreateToggle({
     Name = "Noclip ON/OFF",
     CurrentValue = false,
@@ -319,18 +312,19 @@ PlayerTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- Hitbox Expander (NIE rusza Twojej głowy)
+-- Hitbox Expander (TWÓJ hitbox jest całkowicie chroniony)
 ---------------------------------------------------
 local hitboxEnabled = false
 local headChamsEnabled = false
 local hitboxSize = 2
 local headChamsColor = Color3.fromRGB(255, 255, 0)
 local originalHeadSizes = {}
+local originalLocalHeadSize = nil
 local headChamsDrawings = {}
 local hitboxRefreshConn = nil
 
 local function updateHitbox(plr)
-    if plr == LocalPlayer then return end -- NIGDY nie ruszamy lokalnego gracza
+    if plr == LocalPlayer then return end
 
     local char = plr.Character
     local head = char and char:FindFirstChild("Head")
@@ -346,6 +340,20 @@ local function updateHitbox(plr)
                 head.Size = originalHeadSizes[plr]
                 head.CanCollide = true
             end
+        end
+    end
+end
+
+local function forceProtectLocalHead()
+    local char = LocalPlayer.Character
+    local head = char and char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        if not originalLocalHeadSize then
+            originalLocalHeadSize = head.Size
+        end
+        if head.Size ~= originalLocalHeadSize then
+            head.Size = originalLocalHeadSize
+            head.CanCollide = true
         end
     end
 end
@@ -374,6 +382,9 @@ end
 
 local function refreshHitboxes()
     hitboxRefreshConn = RunService.Heartbeat:Connect(function()
+        -- Zawsze chronimy lokalnego gracza
+        forceProtectLocalHead()
+
         if hitboxEnabled then
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LocalPlayer then
@@ -397,6 +408,13 @@ Players.PlayerRemoving:Connect(function(plr)
         headChamsDrawings[plr]:Remove()
         headChamsDrawings[plr] = nil
     end
+end)
+
+-- Reset local head size when character respawns
+LocalPlayer.CharacterAdded:Connect(function()
+    originalLocalHeadSize = nil
+    task.wait(0.5)
+    forceProtectLocalHead()
 end)
 
 for _, p in ipairs(Players:GetPlayers()) do
@@ -428,16 +446,25 @@ HitboxTab:CreateToggle({
     CurrentValue = false,
     Callback = function(state)
         hitboxEnabled = state
+        forceProtectLocalHead()
+
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer then
                 updateHitbox(plr)
             end
         end
+
         if hitboxEnabled and not hitboxRefreshConn then
             refreshHitboxes()
         elseif not hitboxEnabled and hitboxRefreshConn then
             hitboxRefreshConn:Disconnect()
             hitboxRefreshConn = nil
+            -- Przy wyłączeniu też resetujemy innych
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    updateHitbox(plr)
+                end
+            end
         end
     end
 })
@@ -467,11 +494,10 @@ HitboxTab:CreateColorPicker({
 })
 
 ---------------------------------------------------
--- Combat Tab
+-- Combat Tab (Aimlock = Infinite Distance)
 ---------------------------------------------------
 local aimlockEnabled = false
 local aimlockKey = Enum.KeyCode.E
-local aimlockDistance = 100
 local aimlockFOV = 60
 local showFOVCircle = false
 local isAimlockActive = false
@@ -487,25 +513,30 @@ fovCircle.Filled = false
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
 local function getClosestPlayerHead()
-    local closestPlayer = nil
-    local closestDistance = aimlockDistance
+    local closestHead = nil
+    local closestAngle = aimlockFOV / 2
     local camPos = Camera.CFrame.Position
+    local lookVector = Camera.CFrame.LookVector
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
         local pChar = plr.Character
         local pHead = pChar and pChar:FindFirstChild("Head")
-        if pHead then
-            local distance = (pHead.Position - camPos).Magnitude
-            local vector = pHead.Position - camPos
-            local angle = math.deg(math.acos(Camera.CFrame.LookVector:Dot(vector.Unit)))
-            if distance <= closestDistance and angle <= aimlockFOV / 2 then
-                closestDistance = distance
-                closestPlayer = plr
+        local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
+
+        if pHead and pHum and pHum.Health > 0 then
+            local vector = (pHead.Position - camPos)
+            local distance = vector.Magnitude
+            if distance > 0 then
+                local angle = math.deg(math.acos(lookVector:Dot(vector.Unit)))
+                if angle <= closestAngle then
+                    closestAngle = angle
+                    closestHead = pHead
+                end
             end
         end
     end
-    return closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head")
+    return closestHead
 end
 
 CombatTab:CreateDropdown({
@@ -516,16 +547,8 @@ CombatTab:CreateDropdown({
 })
 
 CombatTab:CreateSlider({
-    Name = "Aimlock Distance",
-    Range = {0, 300},
-    Increment = 5,
-    CurrentValue = aimlockDistance,
-    Callback = function(v) aimlockDistance = v end
-})
-
-CombatTab:CreateSlider({
     Name = "Aimlock FOV",
-    Range = {10, 120},
+    Range = {10, 180},
     Increment = 5,
     CurrentValue = aimlockFOV,
     Callback = function(v)
@@ -549,7 +572,7 @@ CombatTab:CreateToggle({
 })
 
 CombatTab:CreateToggle({
-    Name = "Aimlock ON/OFF",
+    Name = "Aimlock ON/OFF (Infinite Distance)",
     CurrentValue = false,
     Callback = function(state)
         aimlockEnabled = state
@@ -704,7 +727,6 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 
 RunService.RenderStepped:Connect(function()
-    -- Text ESP + Box ESP + Chams
     for plr, text in pairs(espDrawings) do
         local char, root, hum = getPlayerComponents(plr)
         local box = boxEspDrawings[plr]
@@ -712,10 +734,9 @@ RunService.RenderStepped:Connect(function()
         if char and root and hum and hum.Health > 0 then
             local head = char:FindFirstChild("Head")
             local headPos, headOnScreen = Camera:WorldToViewportPoint(head and head.Position or root.Position)
-            local rootPos, rootOnScreen = Camera:WorldToViewportPoint(root.Position)
+            local rootPos = Camera:WorldToViewportPoint(root.Position)
 
-            -- Text ESP
-            if espEnabled and (headOnScreen or rootOnScreen) then
+            if espEnabled and headOnScreen then
                 text.Visible = true
                 text.Position = Vector2.new(headPos.X, headPos.Y - 22)
                 text.Text = string.format("%s | HP: %d", plr.Name, math.floor(hum.Health))
@@ -724,8 +745,7 @@ RunService.RenderStepped:Connect(function()
                 text.Visible = false
             end
 
-            -- Box ESP
-            if boxEspEnabled and box and (headOnScreen or rootOnScreen) then
+            if boxEspEnabled and box and headOnScreen then
                 local height = math.abs(headPos.Y - rootPos.Y) * 2.2
                 local width = height / 1.7
                 box.Size = Vector2.new(width, height)
@@ -741,7 +761,6 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Chams
     for plr, highlight in pairs(chamsDrawings) do
         highlight.Adornee = plr.Character
         highlight.FillColor = chamsColor
@@ -749,7 +768,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ESP Tab UI
 EspTab:CreateToggle({
     Name = "ESP Nick + HP",
     CurrentValue = false,
