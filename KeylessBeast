@@ -11,7 +11,6 @@ local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Ładowanie Rayfield
 local success, Rayfield = pcall(function()
     return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 end)
@@ -50,7 +49,7 @@ local CombatTab = Window:CreateTab("Combat", 4483362458)
 MainTab:CreateLabel("Hub is for XyzPVP Game")
 MainTab:CreateLabel("Developer: Romanov_03")
 MainTab:CreateLabel("Discord: Romanov_03")
-MainTab:CreateLabel("Version: 1.2")
+MainTab:CreateLabel("Version: 1.3")
 
 ---------------------------------------------------
 -- Player Tab
@@ -322,6 +321,27 @@ local originalHeadSizes = {}
 local originalLocalHeadSize = nil
 local headChamsDrawings = {}
 local hitboxRefreshConn = nil
+local localHeadProtectConn = nil
+
+local function forceProtectLocalHead()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local head = char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        if not originalLocalHeadSize then
+            originalLocalHeadSize = head.Size
+        end
+        if head.Size ~= originalLocalHeadSize then
+            head.Size = originalLocalHeadSize
+        end
+        head.CanCollide = true
+    end
+end
+
+-- Ochrona działa ZAWSZE (niezależnie od toggle)
+localHeadProtectConn = RunService.Heartbeat:Connect(function()
+    forceProtectLocalHead()
+end)
 
 local function updateHitbox(plr)
     if plr == LocalPlayer then return end
@@ -340,20 +360,6 @@ local function updateHitbox(plr)
                 head.Size = originalHeadSizes[plr]
                 head.CanCollide = true
             end
-        end
-    end
-end
-
-local function forceProtectLocalHead()
-    local char = LocalPlayer.Character
-    local head = char and char:FindFirstChild("Head")
-    if head and head:IsA("BasePart") then
-        if not originalLocalHeadSize then
-            originalLocalHeadSize = head.Size
-        end
-        if head.Size ~= originalLocalHeadSize then
-            head.Size = originalLocalHeadSize
-            head.CanCollide = true
         end
     end
 end
@@ -381,10 +387,10 @@ local function updateHeadChams(plr)
 end
 
 local function refreshHitboxes()
+    if hitboxRefreshConn then
+        hitboxRefreshConn:Disconnect()
+    end
     hitboxRefreshConn = RunService.Heartbeat:Connect(function()
-        -- Zawsze chronimy lokalnego gracza
-        forceProtectLocalHead()
-
         if hitboxEnabled then
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LocalPlayer then
@@ -394,6 +400,17 @@ local function refreshHitboxes()
         end
     end)
 end
+
+-- Reset rozmiaru głowy po respawnie
+LocalPlayer.CharacterAdded:Connect(function(char)
+    originalLocalHeadSize = nil
+    task.wait(1)
+    local head = char:FindFirstChild("Head")
+    if head then
+        originalLocalHeadSize = head.Size
+        forceProtectLocalHead()
+    end
+end)
 
 Players.PlayerAdded:Connect(function(plr)
     if plr ~= LocalPlayer then
@@ -408,13 +425,6 @@ Players.PlayerRemoving:Connect(function(plr)
         headChamsDrawings[plr]:Remove()
         headChamsDrawings[plr] = nil
     end
-end)
-
--- Reset local head size when character respawns
-LocalPlayer.CharacterAdded:Connect(function()
-    originalLocalHeadSize = nil
-    task.wait(0.5)
-    forceProtectLocalHead()
 end)
 
 for _, p in ipairs(Players:GetPlayers()) do
@@ -454,12 +464,13 @@ HitboxTab:CreateToggle({
             end
         end
 
-        if hitboxEnabled and not hitboxRefreshConn then
+        if hitboxEnabled then
             refreshHitboxes()
-        elseif not hitboxEnabled and hitboxRefreshConn then
-            hitboxRefreshConn:Disconnect()
-            hitboxRefreshConn = nil
-            -- Przy wyłączeniu też resetujemy innych
+        else
+            if hitboxRefreshConn then
+                hitboxRefreshConn:Disconnect()
+                hitboxRefreshConn = nil
+            end
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LocalPlayer then
                     updateHitbox(plr)
@@ -494,13 +505,13 @@ HitboxTab:CreateColorPicker({
 })
 
 ---------------------------------------------------
--- Combat Tab (Aimlock = Infinite Distance)
+-- Combat Tab (Hold to Lock + idealny środek głowy)
 ---------------------------------------------------
 local aimlockEnabled = false
 local aimlockKey = Enum.KeyCode.E
 local aimlockFOV = 60
 local showFOVCircle = false
-local isAimlockActive = false
+local isHoldingAimlock = false
 local aimlockConn = nil
 local aimlockConnections = nil
 
@@ -521,15 +532,17 @@ local function getClosestPlayerHead()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
         local pChar = plr.Character
-        local pHead = pChar and pChar:FindFirstChild("Head")
-        local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
+        if not pChar then continue end
+
+        local pHead = pChar:FindFirstChild("Head")
+        local pHum = pChar:FindFirstChildOfClass("Humanoid")
 
         if pHead and pHum and pHum.Health > 0 then
-            local vector = (pHead.Position - camPos)
-            local distance = vector.Magnitude
-            if distance > 0 then
-                local angle = math.deg(math.acos(lookVector:Dot(vector.Unit)))
-                if angle <= closestAngle then
+            local direction = (pHead.Position - camPos)
+            local distance = direction.Magnitude
+            if distance > 1 then
+                local angle = math.deg(math.acos(math.clamp(lookVector:Dot(direction.Unit), -1, 1)))
+                if angle < closestAngle then
                     closestAngle = angle
                     closestHead = pHead
                 end
@@ -572,37 +585,49 @@ CombatTab:CreateToggle({
 })
 
 CombatTab:CreateToggle({
-    Name = "Aimlock ON/OFF (Infinite Distance)",
+    Name = "Aimlock ON/OFF (Hold to Lock)",
     CurrentValue = false,
     Callback = function(state)
         aimlockEnabled = state
+        isHoldingAimlock = false
+
+        if aimlockConnections then
+            for _, conn in ipairs(aimlockConnections) do
+                conn:Disconnect()
+            end
+            aimlockConnections = nil
+        end
+
         if aimlockEnabled then
             local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 if not gameProcessed and input.KeyCode == aimlockKey then
-                    isAimlockActive = not isAimlockActive
+                    isHoldingAimlock = true
                 end
             end)
+
+            local endedConn = UserInputService.InputEnded:Connect(function(input)
+                if input.KeyCode == aimlockKey then
+                    isHoldingAimlock = false
+                end
+            end)
+
             aimlockConn = RunService.RenderStepped:Connect(function()
-                if isAimlockActive and aimlockEnabled then
+                if isHoldingAimlock and aimlockEnabled then
                     local targetHead = getClosestPlayerHead()
-                    if targetHead then
+                    if targetHead and targetHead.Parent then
+                        -- Idealnie w środek głowy
                         Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
                     end
                 end
+
                 if showFOVCircle then
                     fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
                     fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
                 end
             end)
-            aimlockConnections = {beganConn, aimlockConn}
+
+            aimlockConnections = {beganConn, endedConn, aimlockConn}
         else
-            isAimlockActive = false
-            if aimlockConnections then
-                for _, conn in ipairs(aimlockConnections) do
-                    conn:Disconnect()
-                end
-                aimlockConnections = nil
-            end
             fovCircle.Visible = false
         end
     end
