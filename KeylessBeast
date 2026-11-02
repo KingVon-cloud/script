@@ -49,7 +49,7 @@ local CombatTab = Window:CreateTab("Combat", 4483362458)
 MainTab:CreateLabel("Hub is for XyzPVP Game")
 MainTab:CreateLabel("Developer: Romanov_03")
 MainTab:CreateLabel("Discord: Romanov_03")
-MainTab:CreateLabel("Version: 1.4")
+MainTab:CreateLabel("Version: 1.5")
 
 ---------------------------------------------------
 -- Player Tab
@@ -311,7 +311,7 @@ PlayerTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- Hitbox Expander (TWÓJ hitbox jest całkowicie chroniony + odporny na respawn)
+-- Hitbox Expander
 ---------------------------------------------------
 local hitboxEnabled = false
 local headChamsEnabled = false
@@ -335,7 +335,6 @@ local function forceProtectLocalHead()
     local head = char:FindFirstChild("Head")
     if not (head and head:IsA("BasePart")) then return end
 
-    -- Jeśli nie mamy zapisanego rozmiaru albo zapisany jest nienormalny → spróbuj złapać dobry
     if not originalLocalHeadSize or not isNormalHeadSize(originalLocalHeadSize) then
         if isNormalHeadSize(head.Size) then
             originalLocalHeadSize = head.Size
@@ -344,14 +343,12 @@ local function forceProtectLocalHead()
         end
     end
 
-    -- Zawsze wymuszamy normalny rozmiar
     if (head.Size - originalLocalHeadSize).Magnitude > 0.05 then
         head.Size = originalLocalHeadSize
     end
     head.CanCollide = true
 end
 
--- Ochrona działa ZAWSZE
 RunService.Heartbeat:Connect(function()
     forceProtectLocalHead()
 end)
@@ -416,7 +413,6 @@ local function refreshHitboxes()
     end)
 end
 
--- Obsługa respawnu – najważniejsza część naprawy
 LocalPlayer.CharacterAdded:Connect(function(char)
     originalLocalHeadSize = nil
 
@@ -424,7 +420,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         local head = char:WaitForChild("Head", 6)
         if not head then return end
 
-        -- Czekamy aż postać się w pełni załaduje
         task.wait(1.2)
 
         if head and head.Parent then
@@ -439,7 +434,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     end)
 end)
 
--- Na start
 if LocalPlayer.Character then
     task.spawn(function()
         local head = LocalPlayer.Character:FindFirstChild("Head")
@@ -543,7 +537,7 @@ HitboxTab:CreateColorPicker({
 })
 
 ---------------------------------------------------
--- Combat Tab (Hold to Lock)
+-- Combat Tab (Hold to Lock + pełne celowanie + ręce)
 ---------------------------------------------------
 local aimlockEnabled = false
 local aimlockKey = Enum.KeyCode.E
@@ -653,7 +647,21 @@ CombatTab:CreateToggle({
                 if isHoldingAimlock and aimlockEnabled then
                     local targetHead = getClosestPlayerHead()
                     if targetHead and targetHead.Parent then
+                        -- 1. Kamera idealnie na środek głowy
                         Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+
+                        -- 2. Przesuwamy myszkę na środek głowy (dzięki temu ręce i celowanie też się kleją)
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(targetHead.Position)
+                        if onScreen then
+                            local mouseLocation = UserInputService:GetMouseLocation()
+                            local deltaX = screenPos.X - mouseLocation.X
+                            local deltaY = screenPos.Y - mouseLocation.Y
+
+                            -- mousemoverel działa na większości executorów
+                            if mousemoverel then
+                                mousemoverel(deltaX, deltaY)
+                            end
+                        end
                     end
                 end
 
